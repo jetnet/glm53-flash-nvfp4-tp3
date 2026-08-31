@@ -1,4 +1,5 @@
 cluster.env
+cluster-*.env
 nccl-mesh/
 __pycache__/
 *.pyc
