@@ -135,6 +135,42 @@ per-position curve against the known-good acceptance 0.91, per-pos 14/13/13/13/1
 of 14. A wrong capture shows up on that prompt as a flat, near-zero curve — it degrades
 silently rather than crashing. Full writeup: [results/dflash2-tp3-2026-08-28.md](results/dflash2-tp3-2026-08-28.md).
 
+## Checkpoint variants: LibertAIDAI vs nvidia
+
+Two NVFP4 checkpoints fit this lane. They are chosen by `cluster.env` alone — same tree,
+same `serve.sh`, same image and drafter — never a branch, never a subfolder.
+
+| | `LibertAIDAI/GLM-5.3-Flash-NVFP4` | `nvidia/GLM-5.3-Flash-NVFP4` |
+| --- | --- | --- |
+| Config | `cluster.env.example` (default) | `cluster.env.nvidia-dflash.example` |
+| Input activations | unquantized | static 4-bit (cnn_dailymail calib) |
+| TEB hardmode | **94** | 90-93 |
+| Weights | community re-quant | official |
+
+Measured clean — parallel-1 TEB `2.6.1.dev65`, identical config, only the checkpoint
+differing — LibertAIDAI scores **94**, nvidia **90**: nvidia's static 4-bit
+input-activation quantization costs ~4 points, most visibly on arithmetic, precondition
+compliance and separating data from instructions. Speculation method (MTP or DFlash2)
+does not move quality — rejection sampling preserves the target distribution. Pick
+LibertAIDAI for top quality, nvidia for the official/licensed weights.
+
+The nvidia lane reuses the DFlash2 build above unchanged (same v12 image, same 48/12
+drafter). Do that build once, then:
+
+```bash
+cp cluster.env.nvidia-dflash.example cluster.env && $EDITOR cluster.env
+
+# nvidia's HF repo ships no chat template; serve.sh reads $MODEL_DIR/$CHAT_TEMPLATE,
+# so put one in the checkpoint dir (reuse LibertAIDAI's, or any GLM-5.3 template):
+cp <libertaidai-checkpoint>/chat_template.jinja <nvidia-checkpoint>/chat_template.jinja
+```
+
+The two nvidia-only knobs — `--limit-mm-per-prompt image=2,video=0` (nvidia's unquantized
+video encoder profiling OOMs the head otherwise) and a `MAX_JOBS`/cache-dir bound on the
+FlashInfer+TileLang JIT — ride `serve.sh`'s existing `EXTRA_ARGS`/`EXTRA_ENV`
+passthroughs, so `serve.sh` is byte-for-byte identical for all three variants. Both are
+already set in `cluster.env.nvidia-dflash.example`.
+
 ## Verify
 
 ```bash
